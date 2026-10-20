@@ -1,0 +1,508 @@
+<html>
+
+<head>
+    <style>
+        html,
+        body {
+            background-color: #000;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden !important;
+        }
+
+        #gameboy {
+            background: url("https://cs460.org/assignments/breakout/gameboy_bg.jpg");
+            width: 1200px;
+            height: 675px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #c {
+            width: 600px;
+            height: 360px;
+            position: absolute;
+            top: 53%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .top_bar {
+            color: rgb(0, 255, 0);
+            font-size: 30px;
+            font-weight: bolder;
+        }
+
+        #score {
+            position: absolute;
+            top: 148px;
+            left: 520px;
+        }
+
+        #score_name {
+            position: absolute;
+            top: 148px;
+            left: 400px;
+        }
+
+        #lives {
+            position: absolute;
+            top: 148px;
+            left: 820px;
+        }
+
+        #lives_name {
+            position: absolute;
+            top: 148px;
+            left: 700px;
+        }
+
+        .result {
+            width: 300px;
+            height: 300px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+
+        #overlay {
+            background-color: rgba(0, 0, 0, 0.7);
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+
+    <script id="vertexshader" type="glsl">
+      attribute vec3 position;
+
+      uniform mat4 transform;
+
+      void main(void) {
+
+        vec4 final_position = transform * vec4( position, 1.);
+
+        gl_Position = final_position;
+
+        gl_PointSize = 8.;
+
+      }
+    </script>
+
+    <script id="fragmentshader" type="glsl">
+      precision mediump float;
+
+      uniform vec4 color;
+
+      void main(void) {
+
+        gl_FragColor = color; //vec4(1., 1., 1., 1.);
+
+      }
+    </script>
+
+    <script>
+        window.onload = function () {
+            //************************************************************//
+            //
+            // INITIALIZE WEBGL
+            //
+            c = document.getElementById("c"); // setup canvas
+            gl = c.getContext("webgl"); // setup GL context
+            gl.viewport(0, 0, c.width, c.height);
+
+            //************************************************************//
+            //
+            // SHADERS
+            //
+            v_shader = gl.createShader(gl.VERTEX_SHADER);
+            f_shader = gl.createShader(gl.FRAGMENT_SHADER);
+
+            // compile vertex shader
+            gl.shaderSource(
+                v_shader,
+                document.getElementById("vertexshader").innerText
+            );
+            gl.compileShader(v_shader);
+            if (!gl.getShaderParameter(v_shader, gl.COMPILE_STATUS)) {
+                console.log(gl.getShaderInfoLog(v_shader));
+            } else {
+                console.log("Vertex Shader compiled!");
+            }
+
+            // compile fragment shader
+            gl.shaderSource(
+                f_shader,
+                document.getElementById("fragmentshader").innerText
+            );
+            gl.compileShader(f_shader);
+            if (!gl.getShaderParameter(f_shader, gl.COMPILE_STATUS)) {
+                console.log(gl.getShaderInfoLog(f_shader));
+            } else {
+                console.log("Fragment Shader compiled!");
+            }
+
+            // attach and link the shaders
+            shaderprogram = gl.createProgram();
+            gl.attachShader(shaderprogram, v_shader);
+            gl.attachShader(shaderprogram, f_shader);
+
+            gl.linkProgram(shaderprogram);
+
+            gl.useProgram(shaderprogram);
+
+            STOPPED = false;
+
+            OBJECTS = [];
+            OBJECTS.push(createPaddle([1, 1, 1, 1], [0, -0.9, 0])); // BOTTOM PADDLE
+            OBJECTS.push(createBall([1, 1, 1, 1], [0, 0, 0])); // BALL
+            createBricks(); // ADD BRICKS
+
+            resetBall();
+
+            animate();
+        };
+
+        function createPaddle(color, offset) {
+
+
+
+            //************************************************************//
+            //
+            // CREATE GEOMETRY
+            //
+
+            //
+            // TODO Part 1
+            //
+            vertices = new Float32Array([
+                -0.1, 0.05, 0.0, // V0      // 0
+                -0.1, -0.05, 0.0, // V1, V4  // 1
+                0.1, 0.05, 0.0, // V2, V3  // 2
+                0.1, -0.05, 0.0  // V5      // 3
+            ]);
+
+            indices = new Uint8Array([0, 1, 2,     // Triangle 1 
+                2, 1, 3]); // Triangle 2
+
+
+            v_buffer = gl.createBuffer(); // create
+            gl.bindBuffer(gl.ARRAY_BUFFER, v_buffer); // bind
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW); // put data in
+            gl.bindBuffer(gl.ARRAY_BUFFER, null); // unbind
+
+
+            i_buffer = gl.createBuffer(); // create
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, i_buffer); // bind
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW); // put data in
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null); // unbind
+
+            return [v_buffer, i_buffer, color, offset, 6, gl.TRIANGLES];
+
+        }
+
+
+
+        function createBall(color, offset) {
+            //************************************************************//
+            //
+            // CREATE GEOMETRY
+            //
+            vertices = new Float32Array([
+                0.0, 0.0, 0.0 // V0      // 0
+            ]);
+
+            indices = new Uint8Array([0]);
+
+            v_buffer = gl.createBuffer(); // create
+            gl.bindBuffer(gl.ARRAY_BUFFER, v_buffer); // bind
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW); // put data in
+            gl.bindBuffer(gl.ARRAY_BUFFER, null); // unbind
+
+            i_buffer = gl.createBuffer(); // create
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, i_buffer); // bind
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW); // put data in
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null); // unbind
+
+            return [v_buffer, i_buffer, color, offset, 1, gl.POINTS];
+        }
+
+        function createBrick(color, offset, score) {
+            //************************************************************//
+            //
+            // CREATE GEOMETRY
+            //
+
+            vertices = new Float32Array([
+                -0.095,
+                0.05,
+                0.0, // V0      // 0
+                -0.095,
+                -0.05,
+                0.0, // V1, V4  // 1
+                0.095,
+                0.05,
+                0.0, // V2, V3  // 2
+                0.095,
+                -0.05,
+                0.0, // V5      // 3
+            ]);
+
+            indices = new Uint8Array([
+                0,
+                1,
+                2, // Triangle 1
+                2,
+                1,
+                3,
+            ]); // Triangle 2
+
+            v_buffer = gl.createBuffer(); // create
+            gl.bindBuffer(gl.ARRAY_BUFFER, v_buffer); // bind
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW); // put data in
+            gl.bindBuffer(gl.ARRAY_BUFFER, null); // unbind
+
+            i_buffer = gl.createBuffer(); // create
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, i_buffer); // bind
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW); // put data in
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null); // unbind
+
+            return [v_buffer, i_buffer, color, offset, 6, gl.TRIANGLES, score];
+        }
+
+        /*
+        This function builds the wall of bricks as a grid of 4 rows and 9 columns, equalling 36 bricks total. 
+        The first brick's center is located at (-0.8, 0.9) which is the top left corner.
+        The outer loop is one pass per row for 4 rows and then the inner loop is one pass per brick in the row (9 bricks).
+        For each brick it picks a random color, creates a brick which builds the brick's geometry and returns its array,
+        then pushes that array into OBJECTS and moves the offset_x 0.2 to the right for the next brick.
+        After each row of bricks, the offset_x goes back to -0.8, the left side, and offset_y drops by 0.14 to start the next row below.ca
+        */
+        function createBricks() {
+            offset_x = -0.8
+            offset_y = 0.9
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 9; j++) {
+                    color = [Math.random(), Math.random(), Math.random(), 1] // RANDOM COLOR
+                    OBJECTS.push(createBrick(color, [offset_x, offset_y, 0], 4 - i))
+                    offset_x += 0.2
+                }
+                offset_x = -0.8
+                offset_y -= 0.14
+            }
+        }
+
+        function animate() {
+            if (STOPPED) {
+                return;
+            }
+
+            requestAnimationFrame(animate);
+
+            // CLEAR NOW BEFORE ANY DRAWING
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            updateBall();
+
+            for (var o = 0; o < OBJECTS.length; o++) {
+                var current = OBJECTS[o];
+
+                var v_buffer = current[0];
+                var i_buffer = current[1];
+                var COLOR = current[2];
+                var OFFSET = current[3];
+                var VERTEXCOUNT = current[4];
+                var PRIMITIVE = current[5];
+
+                //************************************************************//
+                //
+                // CONNECT SHADER WITH GEOMETRY
+                //
+                gl.bindBuffer(gl.ARRAY_BUFFER, v_buffer);
+
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, i_buffer);
+
+                // find the attribute in the shader source
+                var a_position = gl.getAttribLocation(shaderprogram, "position");
+
+                gl.vertexAttribPointer(a_position, 3, gl.FLOAT, false, 0, 0);
+
+                gl.enableVertexAttribArray(a_position);
+
+                var u_color = gl.getUniformLocation(shaderprogram, "color");
+
+                gl.uniform4fv(u_color, new Float32Array(COLOR));
+
+                // var u_offset = gl.getUniformLocation( shaderprogram, 'offset' );
+
+                var u_transform = gl.getUniformLocation(shaderprogram, "transform");
+
+                current_transform = new Float32Array([
+                    1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0,
+                    OFFSET[0], OFFSET[1], 0, 1,
+                ]);
+
+                gl.uniformMatrix4fv(u_transform, false, current_transform);
+
+                //************************************************************//
+                //
+                // DRAW!
+                //
+                // gl.drawArrays( gl.LINES, 0, 6 );
+
+                gl.drawElements(PRIMITIVE, VERTEXCOUNT, gl.UNSIGNED_BYTE, 0);
+            }
+        }
+
+        /*
+        This function puts the ball back near the middle of the screen and gives it a new direction.
+        The position of the ball is determined by the first two lines of the function. 
+        OBJECTS[1] is the ball and index 3 is the offset. 
+        Math.random() / 10 gives a number from 0 - 0.1 so the ball lands a little above of the exact center,
+        this random shift makes each round start a little differently.
+        The direction is determined by the last two lines of the function.
+        PI / 8 + Math.random() gives the ball a random angle and then its multiplied to make it negative.
+        The angle is negative so the ball goes down toward the paddle.
+        */
+        function resetBall() {
+            OBJECTS[1][3][0] = Math.random() / 10; // SET TO CENTER
+            OBJECTS[1][3][1] = Math.random() / 10;
+
+            BALLDIRECTION = Math.PI / 8 + Math.random();
+            BALLDIRECTION *= -1;
+        }
+
+        /*
+        This reads the current score from <span id = "score">, converts it with parseInt, add's the brick's point and writes it back.
+        The if statement also checks whether the board is empty. By the time score() runs, updateBall() has already removed the brick with splice.
+        If OBJECTS now has only 2 items, the paddle and the ball, every brick is gone, and it calls createBricks() for a new set. 
+        The score carries over, so the game keeps going until you run out of lives.
+        */
+        function score(score_value) {
+            var old_score = document.getElementById("score").innerText;
+            document.getElementById("score").innerText = parseInt(old_score) + score_value;
+            if (OBJECTS.length == 2) { //IF ALL BLRICKS DESTROYED CREATE MORE
+                createBricks();
+            }
+        }
+
+        /*
+        This function keeps the number of lives in the page's text.
+        It reads the current lives from <span id = "lives">. This is a string.
+        Then the string is converted with parseInt and subtracts 1 (because it is 0 indexed).
+        It checks whether that was the last life.
+        If it was the last life of the game, the game ends. 
+        */
+        function loseLife() {
+            var old_life = document.getElementById("lives").innerText;
+            document.getElementById("lives").innerText = parseInt(old_life) - 1;
+            if (old_life == 1) {
+                STOPPED = true;
+                document.getElementById("overlay").style.display = "block";
+                document.getElementById("game_over").style.display = "block";
+            }
+        }
+
+        function updateBall() {
+            BALL_X = OBJECTS[1][3][0];
+            BALL_Y = OBJECTS[1][3][1];
+
+            BOTTOM_PADDLE_X = OBJECTS[0][3][0];
+            BOTTOM_PADDLE_Y = OBJECTS[0][3][1];
+            BOTTOM_PADDLE_WIDTH = 0.2;
+
+            if (BALL_X >= 0.95) {
+                // RIGHT WALL
+                BALLDIRECTION = Math.PI - BALLDIRECTION;
+            } else if (BALL_X <= -0.95) {
+                // LEFT WALL
+                BALLDIRECTION = Math.PI - BALLDIRECTION;
+            } else if (BALL_Y >= 0.96) {
+                // TOP WALL
+                BALLDIRECTION = - BALLDIRECTION;
+            } else if (BALL_Y >= 0.2) {
+                // TOP BRICKS
+                for (let i = 2; i < OBJECTS.length; i++) {
+                    BRICK_OFFSET_X = OBJECTS[i][3][0];
+                    BRICK_OFFSET_Y = OBJECTS[i][3][1];
+                    if (BALL_X > BRICK_OFFSET_X - 0.095 &&
+                        BALL_X < BRICK_OFFSET_X + 0.095 &&
+                        BALL_Y > BRICK_OFFSET_Y - 0.05 &&
+                        BALL_Y < BRICK_OFFSET_Y + 0.05) {
+                        BALLDIRECTION = - BALLDIRECTION;
+                        score_num = OBJECTS[i][6];
+                        OBJECTS.splice(i, 1);
+                        score(score_num);
+                    }
+                }
+            } else if (BALL_Y <= -0.85) {
+                // BOTTOM 
+
+                BOTTOM_PADDLE_LEFT = BOTTOM_PADDLE_X - BOTTOM_PADDLE_WIDTH / 2;
+                BOTTOM_PADDLE_RIGHT = BOTTOM_PADDLE_X + BOTTOM_PADDLE_WIDTH / 2;
+
+                // LET'S CHECK IF A PADDLE IS THERE
+                if (BALL_X >= BOTTOM_PADDLE_LEFT && BALL_X <= BOTTOM_PADDLE_RIGHT) {
+                    // YES, REFLECT
+                    BALLDIRECTION = -BALLDIRECTION;
+                    //UPDATE STEP ON BOUNCE TO INCREASE SPEED
+                } else {
+                    // LOSE LIFE
+                    loseLife();
+                    resetBall();
+                    return;
+                }
+            }
+
+            // UPDATE BALL POSITION
+            OBJECTS[1][3][0] += Math.cos(BALLDIRECTION) * 0.02;
+            OBJECTS[1][3][1] += Math.sin(BALLDIRECTION) * 0.02;
+        }
+
+        window.onkeydown = function (e) {
+            if (STOPPED) {
+                // restart the game
+                window.location.reload();
+            }
+
+            var STEP = 0.1;
+            var LIMIT = 0.9; // 1 - half the paddle width
+
+            if (e.key == "ArrowLeft") {
+                OBJECTS[0][3][0] = Math.max(OBJECTS[0][3][0] - STEP, -LIMIT);
+
+            } else if (e.key == "ArrowRight") {
+                OBJECTS[0][3][0] = Math.min(OBJECTS[0][3][0] + STEP, LIMIT);
+            }
+        };
+    </script>
+</head>
+
+<body>
+    <div id="gameboy">
+        <span id="score_name" class="top_bar">SCORE:</span>
+        <span id="score" class="top_bar">0</span>
+
+        <span id="lives_name" class="top_bar">LIVES:</span>
+        <span id="lives" class="top_bar">3</span>
+        <div id="overlay">
+            <img id="game_over" class="result" src="https://cs460.org/assignments/breakout/game_over.jpg" />
+        </div>
+        <canvas id="c"></canvas>
+
+    </div>
+</body>
+
+</html>
